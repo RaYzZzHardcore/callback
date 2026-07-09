@@ -1,0 +1,630 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Auth Callback</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0a0a0a;
+    --panel:#141414;
+    --panel-2:#101010;
+    --border:#262626;
+    --border-soft:#1c1c1c;
+    --text-hi:#f2f2ef;
+    --text-mid:#9a9a97;
+    --text-dim:#565654;
+    --white:#ffffff;
+    --line:#2c2c2a;
+    --focus:#f2f2ef;
+    --mono: 'JetBrains Mono', ui-monospace, monospace;
+    --sans: 'Inter', -apple-system, sans-serif;
+  }
+
+  *{box-sizing:border-box; margin:0; padding:0;}
+
+  html,body{height:100%;}
+
+  body{
+    background:var(--bg);
+    color:var(--text-hi);
+    font-family:var(--sans);
+    min-height:100vh;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:24px;
+    position:relative;
+    overflow-x:hidden;
+    -webkit-font-smoothing:antialiased;
+  }
+
+  /* fine dot grid backdrop */
+  body::before{
+    content:"";
+    position:fixed;
+    inset:0;
+    background-image: radial-gradient(circle, #1e1e1c 1px, transparent 1px);
+    background-size: 28px 28px;
+    mask-image: radial-gradient(ellipse 60% 50% at 50% 40%, #000 10%, transparent 75%);
+    pointer-events:none;
+  }
+
+  .stage{
+    width:100%;
+    max-width:560px;
+    position:relative;
+    z-index:1;
+  }
+
+  /* ---- top status bar ---- */
+  .statusbar{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    padding:0 4px 14px 4px;
+    font-family:var(--mono);
+    font-size:11px;
+    letter-spacing:.08em;
+    color:var(--text-dim);
+  }
+  .statusbar .id{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    color:var(--text-mid);
+  }
+  .dot{
+    width:6px;height:6px;border-radius:50%;
+    background:var(--text-dim);
+    flex-shrink:0;
+  }
+  .dot.live{
+    background:var(--white);
+    box-shadow:0 0 0 0 rgba(255,255,255,.5);
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse{
+    0%{ box-shadow:0 0 0 0 rgba(255,255,255,.35); }
+    70%{ box-shadow:0 0 0 6px rgba(255,255,255,0); }
+    100%{ box-shadow:0 0 0 0 rgba(255,255,255,0); }
+  }
+
+  /* ---- panel ---- */
+  .panel{
+    background:var(--panel);
+    border:1px solid var(--border);
+    border-radius:2px;
+    overflow:hidden;
+  }
+
+  .panel-header{
+    padding:20px 24px;
+    border-bottom:1px solid var(--border-soft);
+    background:linear-gradient(180deg, #171717 0%, #141414 100%);
+  }
+  .eyebrow{
+    font-family:var(--mono);
+    font-size:10px;
+    letter-spacing:.14em;
+    color:var(--text-dim);
+    text-transform:uppercase;
+    margin-bottom:8px;
+  }
+  h1{
+    font-family:var(--sans);
+    font-size:19px;
+    font-weight:600;
+    letter-spacing:-.01em;
+    color:var(--text-hi);
+  }
+
+  /* ---- diagnostic log ---- */
+  .log{
+    padding:18px 24px;
+    font-family:var(--mono);
+    font-size:12px;
+    line-height:1.9;
+    color:var(--text-mid);
+    border-bottom:1px solid var(--border-soft);
+    min-height:24px;
+  }
+  .log-line{
+    display:flex;
+    gap:10px;
+    opacity:0;
+    animation: appear .25s ease forwards;
+  }
+  .log-line .tick{ color:var(--text-dim); flex-shrink:0; }
+  .log-line .ok{ color:var(--text-hi); }
+  .log-line .val{ color:var(--text-mid); word-break:break-all; }
+  @keyframes appear{ to{ opacity:1; } }
+
+  /* ---- body content ---- */
+  .content{
+    padding:28px 24px 24px 24px;
+  }
+
+  .badge{
+    width:44px; height:44px;
+    border:1px solid var(--border);
+    border-radius:50%;
+    display:flex; align-items:center; justify-content:center;
+    margin-bottom:18px;
+    background:var(--panel-2);
+  }
+  .badge svg{ width:18px; height:18px; }
+
+  .headline{
+    font-size:17px;
+    font-weight:600;
+    color:var(--text-hi);
+    letter-spacing:-.01em;
+    margin-bottom:8px;
+  }
+  .sub{
+    font-size:13.5px;
+    color:var(--text-mid);
+    line-height:1.6;
+    margin-bottom:22px;
+  }
+  .sub code{
+    font-family:var(--mono);
+    font-size:12px;
+    background:var(--panel-2);
+    border:1px solid var(--border-soft);
+    padding:1px 5px;
+    border-radius:3px;
+    color:var(--text-hi);
+  }
+
+  /* ---- buttons ---- */
+  .actions{ display:flex; flex-direction:column; gap:10px; }
+  .btn{
+    font-family:var(--sans);
+    font-size:13.5px;
+    font-weight:600;
+    padding:13px 18px;
+    border-radius:2px;
+    border:1px solid transparent;
+    cursor:pointer;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    gap:8px;
+    text-decoration:none;
+    transition:transform .12s ease, background .12s ease, border-color .12s ease;
+  }
+  .btn:active{ transform:scale(.98); }
+  .btn-primary{
+    background:var(--white);
+    color:#0a0a0a;
+  }
+  .btn-primary:hover{ background:#e4e4e1; }
+  .btn-secondary{
+    background:transparent;
+    color:var(--text-hi);
+    border-color:var(--border);
+  }
+  .btn-secondary:hover{ border-color:var(--text-dim); }
+
+  .btn:focus-visible{
+    outline:2px solid var(--focus);
+    outline-offset:2px;
+  }
+
+  /* ---- form ---- */
+  .field{ margin-bottom:14px; }
+  .field label{
+    display:block;
+    font-family:var(--mono);
+    font-size:10.5px;
+    letter-spacing:.08em;
+    text-transform:uppercase;
+    color:var(--text-dim);
+    margin-bottom:7px;
+  }
+  .field input{
+    width:100%;
+    background:var(--panel-2);
+    border:1px solid var(--border);
+    color:var(--text-hi);
+    font-family:var(--sans);
+    font-size:14px;
+    padding:12px 13px;
+    border-radius:2px;
+  }
+  .field input:focus-visible{
+    outline:none;
+    border-color:var(--text-mid);
+  }
+  .hint{
+    font-family:var(--mono);
+    font-size:11px;
+    color:var(--text-dim);
+    margin-top:16px;
+    display:none;
+  }
+  .hint.show{ display:block; }
+  .hint.err{ color:var(--text-hi); }
+
+  /* ---- raw details ---- */
+  .raw{
+    border-top:1px solid var(--border-soft);
+  }
+  .raw summary{
+    padding:14px 24px;
+    font-family:var(--mono);
+    font-size:11px;
+    letter-spacing:.06em;
+    color:var(--text-dim);
+    cursor:pointer;
+    list-style:none;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    user-select:none;
+  }
+  .raw summary::-webkit-details-marker{ display:none; }
+  .raw summary::after{
+    content:"+";
+    font-size:14px;
+    color:var(--text-dim);
+  }
+  .raw[open] summary::after{ content:"–"; }
+  .raw pre{
+    margin:0 24px 18px 24px;
+    padding:14px;
+    background:var(--panel-2);
+    border:1px solid var(--border-soft);
+    border-radius:2px;
+    font-family:var(--mono);
+    font-size:11px;
+    color:var(--text-mid);
+    overflow-x:auto;
+    white-space:pre-wrap;
+    word-break:break-all;
+  }
+
+  footer{
+    text-align:center;
+    padding-top:18px;
+    font-family:var(--mono);
+    font-size:10.5px;
+    letter-spacing:.06em;
+    color:var(--text-dim);
+  }
+
+  @media (max-width:480px){
+    .content{ padding:24px 18px 20px 18px; }
+    .panel-header{ padding:18px 18px; }
+    .log{ padding:16px 18px; }
+    .raw summary, .raw pre{ margin-left:18px; margin-right:18px; padding-left:0; padding-right:0;}
+    .raw summary{ padding:14px 18px; }
+  }
+
+  @media (prefers-reduced-motion: reduce){
+    .log-line{ animation:none; opacity:1; }
+    .dot.live{ animation:none; }
+  }
+</style>
+</head>
+<body>
+
+<div class="stage">
+
+  <div class="statusbar">
+    <div class="id"><span class="dot live" id="statusDot"></span><span id="statusText">AUTH · CALLBACK</span></div>
+    <div id="clock">--:--:--</div>
+  </div>
+
+  <div class="panel">
+
+    <div class="panel-header">
+      <div class="eyebrow">SUPABASE / GOTRUE · REDIRECT HANDLER</div>
+      <h1 id="panelTitle">Verifica in corso</h1>
+    </div>
+
+    <div class="log" id="log" aria-live="polite"></div>
+
+    <div class="content" id="content">
+      <!-- populated by JS -->
+    </div>
+
+    <details class="raw">
+      <summary>Parametri ricevuti (raw)</summary>
+      <pre id="rawParams">—</pre>
+    </details>
+
+  </div>
+
+  <footer>Rapportino Elettronico · sessione locale, nessun dato inviato a terzi</footer>
+</div>
+
+<script>
+/* =========================================================
+   CONFIG
+   ========================================================= */
+const CONFIG = {
+  SUPABASE_URL: "https://ekiufrmgyeqrtrsrmifn.supabase.co",
+  SUPABASE_ANON_KEY: "sb_publishable_jXjgKkdr8Dt5rXG_Wq7JLw_82E0Uv7O",
+  APP_SCHEME: "https://rayzzzhardcore.github.io/app"
+};
+
+/* ---------- parsing parameters (hash + query) ---------- */
+function parseParams(){
+  const hash = window.location.hash.startsWith('#') ? window.location.hash.slice(1) : window.location.hash;
+  const search = window.location.search.startsWith('?') ? window.location.search.slice(1) : window.location.search;
+  const p = {};
+  new URLSearchParams(hash).forEach((v,k)=> p[k]=v);
+  new URLSearchParams(search).forEach((v,k)=> { if(!(k in p)) p[k]=v; });
+  return p;
+}
+
+const params = parseParams();
+const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/* ---------- clock ---------- */
+function tick(){
+  document.getElementById('clock').textContent =
+    new Date().toLocaleTimeString('it-IT', {hour12:false});
+}
+tick(); setInterval(tick, 1000);
+
+/* ---------- diagnostic boot log ---------- */
+const logEl = document.getElementById('log');
+const steps = [];
+
+steps.push({ ok:true, text:'lettura fragment/query URL' });
+
+if (params.error) {
+  steps.push({ ok:false, text:'errore riportato dal provider', val: params.error_code || params.error });
+} else if (params.access_token) {
+  steps.push({ ok:true, text:'access_token individuato' });
+  steps.push({ ok:true, text:'tipo evento', val: params.type || 'n/d' });
+} else {
+  steps.push({ ok:false, text:'nessun token nei parametri' });
+}
+
+function renderLog(i){
+  if(i >= steps.length){ renderContent(); return; }
+  const s = steps[i];
+  const line = document.createElement('div');
+  line.className = 'log-line';
+  line.style.animationDelay = reducedMotion ? '0s' : (i*0.12)+'s';
+  line.innerHTML = `<span class="tick">${s.ok ? '✓' : '·'}</span><span class="${s.ok?'ok':'val'}">${s.text}${s.val ? ' <span class=\"val\">— '+escapeHtml(s.val)+'</span>' : ''}</span>`;
+  logEl.appendChild(line);
+  setTimeout(()=>renderLog(i+1), reducedMotion ? 0 : 220);
+}
+renderLog(0);
+
+function escapeHtml(str){
+  return String(str).replace(/[&<>"']/g, m => ({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+  }[m]));
+}
+
+/* ---------- raw params dump ---------- */
+document.getElementById('rawParams').textContent =
+  Object.keys(params).length
+    ? JSON.stringify(maskSensitive(params), null, 2)
+    : 'Nessun parametro presente nell\'URL.';
+
+function maskSensitive(obj){
+  const out = {...obj};
+  ['access_token','refresh_token'].forEach(k=>{
+    if(out[k]) out[k] = out[k].slice(0,10) + '…' + out[k].slice(-6);
+  });
+  return out;
+}
+
+/* ---------- icons (grayscale, line-based) ---------- */
+const ICON = {
+  check: '<svg viewBox="0 0 24 24" fill="none" stroke="#f2f2ef" stroke-width="1.6"><path d="M4 12.5l5 5L20 6.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  cross: '<svg viewBox="0 0 24 24" fill="none" stroke="#f2f2ef" stroke-width="1.6"><path d="M6 6l12 12M18 6L6 18" stroke-linecap="round"/></svg>',
+  key:   '<svg viewBox="0 0 24 24" fill="none" stroke="#f2f2ef" stroke-width="1.6"><circle cx="8" cy="15" r="3.4"/><path d="M10.4 12.6L20 3M20 3v4.5M20 3h-4.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  mail:  '<svg viewBox="0 0 24 24" fill="none" stroke="#f2f2ef" stroke-width="1.6"><rect x="3.5" y="5.5" width="17" height="13" rx="1"/><path d="M4 6.5l8 6.5 8-6.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  spark: '<svg viewBox="0 0 24 24" fill="none" stroke="#f2f2ef" stroke-width="1.6"><path d="M12 3v5M12 16v5M3 12h5M16 12h5M6 6l3 3M18 18l-3-3M6 18l3-3M18 6l-3 3" stroke-linecap="round"/></svg>'
+};
+
+/* ---------- main content renderer ---------- */
+function renderContent(){
+  const content = document.getElementById('content');
+  const title = document.getElementById('panelTitle');
+  const statusText = document.getElementById('statusText');
+  const statusDot = document.getElementById('statusDot');
+
+  const type = params.type;
+
+  if (params.error) {
+    statusText.textContent = 'AUTH · ERRORE';
+    statusDot.classList.remove('live');
+    title.textContent = 'Verifica non riuscita';
+    content.innerHTML = block({
+      icon: ICON.cross,
+      headline: 'Il link non è più valido',
+      sub: `Il provider ha restituito un errore${params.error_description ? ': <code>'+escapeHtml(decodeURIComponent(params.error_description.replace(/\+/g,' ')))+'</code>' : '.'} Il link potrebbe essere scaduto o già stato utilizzato.`,
+      actions: `
+        <a class="btn btn-primary" href="${CONFIG.APP_SCHEME}?action=retry">Torna all'app</a>
+        <button class="btn btn-secondary" onclick="location.reload()">Riprova la verifica</button>
+      `
+    });
+    return;
+  }
+
+  if (!params.access_token) {
+    statusText.textContent = 'AUTH · IN ATTESA';
+    title.textContent = 'Nessun token trovato';
+    content.innerHTML = block({
+      icon: ICON.mail,
+      headline: 'Apri questo link dall\'email',
+      sub: 'Questa pagina gestisce i redirect di conferma email, recupero password e accesso rapido di Supabase. Apri il link ricevuto via email per continuare.',
+      actions: `<a class="btn btn-secondary" href="${CONFIG.APP_SCHEME}">Torna all'app</a>`
+    });
+    return;
+  }
+
+  switch(type){
+
+    case 'signup':
+      statusText.textContent = 'AUTH · CONFERMATO';
+      title.textContent = 'Email confermata';
+      content.innerHTML = block({
+        icon: ICON.check,
+        headline: 'Account verificato con successo',
+        sub: 'Il tuo indirizzo email è stato confermato. Puoi tornare all\'app: la sessione verrà attivata automaticamente.',
+        actions: `<a class="btn btn-primary" href="${deepLink()}">Apri l'app</a>`
+      });
+      break;
+
+    case 'magiclink':
+      statusText.textContent = 'AUTH · ACCESSO OK';
+      title.textContent = 'Accesso rapido';
+      content.innerHTML = block({
+        icon: ICON.spark,
+        headline: 'Accesso effettuato',
+        sub: 'Hai eseguito l\'accesso tramite magic link. Torna all\'app per continuare.',
+        actions: `<a class="btn btn-primary" href="${deepLink()}">Apri l'app</a>`
+      });
+      break;
+
+    case 'invite':
+      statusText.textContent = 'AUTH · INVITO';
+      title.textContent = 'Invito accettato';
+      content.innerHTML = block({
+        icon: ICON.spark,
+        headline: 'Benvenuto',
+        sub: 'Il tuo invito è stato confermato. Completa l\'accesso dall\'app per impostare il tuo profilo.',
+        actions: `<a class="btn btn-primary" href="${deepLink()}">Completa il profilo</a>`
+      });
+      break;
+
+    case 'email_change':
+      statusText.textContent = 'AUTH · EMAIL AGGIORNATA';
+      title.textContent = 'Nuova email confermata';
+      content.innerHTML = block({
+        icon: ICON.mail,
+        headline: 'Indirizzo email aggiornato',
+        sub: 'Il cambio email è stato confermato. Da questo momento usa il nuovo indirizzo per accedere.',
+        actions: `<a class="btn btn-primary" href="${deepLink()}">Apri l'app</a>`
+      });
+      break;
+
+    case 'recovery':
+      statusText.textContent = 'AUTH · RESET PASSWORD';
+      title.textContent = 'Imposta una nuova password';
+      content.innerHTML = recoveryBlock();
+      wireRecoveryForm();
+      break;
+
+    default:
+      statusText.textContent = 'AUTH · SESSIONE OK';
+      title.textContent = 'Token ricevuto';
+      content.innerHTML = block({
+        icon: ICON.key,
+        headline: 'Sessione valida',
+        sub: 'Token di accesso ricevuto correttamente. Torna all\'app per continuare.',
+        actions: `<a class="btn btn-primary" href="${deepLink()}">Apri l'app</a>`
+      });
+  }
+}
+
+function block({icon, headline, sub, actions}){
+  return `
+    <div class="badge">${icon}</div>
+    <div class="headline">${headline}</div>
+    <div class="sub">${sub}</div>
+    <div class="actions">${actions}</div>
+  `;
+}
+
+function recoveryBlock(){
+  return `
+    <div class="badge">${ICON.key}</div>
+    <div class="headline">Nuova password</div>
+    <div class="sub">Scegli una nuova password per il tuo account. Dovrà contenere almeno 8 caratteri.</div>
+    <form id="recoveryForm">
+      <div class="field">
+        <label for="pw1">Nuova password</label>
+        <input type="password" id="pw1" autocomplete="new-password" minlength="8" required>
+      </div>
+      <div class="field">
+        <label for="pw2">Conferma password</label>
+        <input type="password" id="pw2" autocomplete="new-password" minlength="8" required>
+      </div>
+      <div class="actions">
+        <button type="submit" class="btn btn-primary" id="recoverySubmit">Aggiorna password</button>
+      </div>
+      <div class="hint" id="recoveryHint"></div>
+    </form>
+  `;
+}
+
+function wireRecoveryForm(){
+  const form = document.getElementById('recoveryForm');
+  const hint = document.getElementById('recoveryHint');
+  const submitBtn = document.getElementById('recoverySubmit');
+
+  form.addEventListener('submit', async (e)=>{
+    e.preventDefault();
+    const pw1 = document.getElementById('pw1').value;
+    const pw2 = document.getElementById('pw2').value;
+
+    hint.className = 'hint show';
+
+    if (pw1.length < 8){
+      hint.textContent = 'La password deve avere almeno 8 caratteri.';
+      hint.classList.add('err');
+      return;
+    }
+    if (pw1 !== pw2){
+      hint.textContent = 'Le due password non coincidono.';
+      hint.classList.add('err');
+      return;
+    }
+
+    hint.classList.remove('err');
+    hint.textContent = 'Aggiornamento in corso…';
+    submitBtn.disabled = true;
+
+    try{
+      const res = await fetch(`${CONFIG.SUPABASE_URL}/auth/v1/user`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': CONFIG.SUPABASE_ANON_KEY,
+          'Authorization': `Bearer ${params.access_token}`
+        },
+        body: JSON.stringify({ password: pw1 })
+      });
+
+      if (!res.ok){
+        const err = await res.json().catch(()=>({}));
+        throw new Error(err.msg || err.error_description || 'Aggiornamento non riuscito');
+      }
+
+      hint.textContent = 'Password aggiornata. Reindirizzamento all\'app…';
+      submitBtn.textContent = 'Fatto';
+      setTimeout(()=>{ window.location.href = deepLink(); }, 1200);
+
+    } catch(err){
+      hint.textContent = err.message;
+      hint.classList.add('err');
+      submitBtn.disabled = false;
+    }
+  });
+}
+
+function deepLink(){
+  const usp = new URLSearchParams();
+  ['access_token','refresh_token','expires_in','expires_at','token_type','type']
+    .forEach(k=>{ if(params[k]) usp.set(k, params[k]); });
+  return `${CONFIG.APP_SCHEME}?${usp.toString()}`;
+}
+</script>
+
+</body>
+</html>
